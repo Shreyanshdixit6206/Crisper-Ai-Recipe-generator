@@ -12,61 +12,23 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 const PROXY_GENERATE_URL = '/api/generate';
 const PROXY_ANALYZE_URL = '/api/analyze-image';
 
-// Build the recipe generation prompt
+// Build optimized recipe prompt (token-efficient)
 const buildRecipePrompt = (ingredients, filters) => {
-    const dietaryText = filters.dietary.length > 0
-        ? `Dietary restrictions: ${filters.dietary.join(', ')}.`
-        : '';
+    // Build compact filter string
+    const filterParts = [];
+    if (filters.dietary.length > 0) filterParts.push(`diet:${filters.dietary.join(',')}`);
+    if (filters.cuisine) filterParts.push(`cuisine:${filters.cuisine}`);
+    if (filters.cookingTime !== 60) filterParts.push(`time:<${filters.cookingTime}min`);
+    if (filters.difficulty !== 'Any') filterParts.push(`level:${filters.difficulty}`);
 
-    const cuisineText = filters.cuisine
-        ? `Preferred cuisine: ${filters.cuisine}.`
-        : '';
+    const filterStr = filterParts.length > 0 ? `\nFilters: ${filterParts.join(' | ')}` : '';
 
-    const timeText = `Maximum cooking time: ${filters.cookingTime} minutes.`;
-    const difficultyText = `Difficulty level: ${filters.difficulty}.`;
-    const calorieText = filters.maxCalories
-        ? `Maximum calories per serving: ${filters.maxCalories}.`
-        : '';
+    // Compact prompt - ~200 tokens vs ~500 tokens before
+    return `Generate 3 recipes using: ${ingredients.join(', ')}${filterStr}
 
-    return `You are a creative chef assistant. Generate exactly 3 unique recipes using primarily these ingredients: ${ingredients.join(', ')}.
+Return JSON array. Each recipe: {id,name,description,cookingTime,difficulty,servings,calories,cuisine,dietaryTags[],matchPercentage,ingredients[{name,amount,userHas}],instructions[],nutritionalInfo:{protein,carbs,fat,fiber},tips}
 
-${dietaryText}
-${cuisineText}
-${timeText}
-${difficultyText}
-${calorieText}
-
-IMPORTANT: Prioritize recipes that use the provided ingredients. Minimize additional ingredients needed.
-
-Return your response as a valid JSON array with exactly 3 recipe objects. Each recipe must have this exact structure:
-{
-  "id": "unique-id-string",
-  "name": "Recipe Name",
-  "description": "Brief appetizing description (1-2 sentences)",
-  "cookingTime": number (in minutes),
-  "difficulty": "Easy" | "Moderate" | "Advanced",
-  "servings": number,
-  "calories": number (per serving),
-  "cuisine": "Cuisine type",
-  "dietaryTags": ["array", "of", "relevant", "tags"],
-  "matchPercentage": number (0-100, how many provided ingredients are used),
-  "ingredients": [
-    {"name": "ingredient name", "amount": "quantity", "userHas": boolean}
-  ],
-  "instructions": [
-    "Step 1: Detailed instruction...",
-    "Step 2: Detailed instruction..."
-  ],
-  "nutritionalInfo": {
-    "protein": "Xg",
-    "carbs": "Xg",
-    "fat": "Xg",
-    "fiber": "Xg"
-  },
-  "tips": "Optional chef's tip or serving suggestion"
-}
-
-Return ONLY the JSON array, no additional text or markdown formatting.`;
+JSON only, no markdown.`;
 };
 
 // Parse Gemini response
@@ -116,7 +78,7 @@ export const generateRecipes = async (ingredients, filters) => {
                         temperature: 0.8,
                         topK: 40,
                         topP: 0.95,
-                        maxOutputTokens: 4096,
+                        maxOutputTokens: 2048,
                     }
                 })
             });
@@ -159,7 +121,7 @@ export const generateRecipes = async (ingredients, filters) => {
                     temperature: 0.8,
                     topK: 40,
                     topP: 0.95,
-                    maxOutputTokens: 4096,
+                    maxOutputTokens: 2048,
                 }
             })
         });
